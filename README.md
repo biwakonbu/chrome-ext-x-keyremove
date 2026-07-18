@@ -56,10 +56,10 @@ x.com を開いた状態で以下を確認します。
 ## 仕組み
 
 1. `manifest.json` の `content_scripts` を `run_at: "document_start"` で登録し、X 側スクリプトより先にリスナを仕込みます。
-2. `document` 上の **キャプチャフェーズ**（`addEventListener` 第3引数 `true`）で `keydown` / `keypress` / `keyup` を購読します。キャプチャフェーズはターゲット到達前に発火するため、X が React ルートにバインドしたリスナより先に捕捉できます。
+2. `window` 上の **キャプチャフェーズ**（`addEventListener` 第3引数 `true`）で `keydown` のみを購読します（keyup/keypress は干渉リスクを減らすため監視しません）。キャプチャフェーズは window → document → … → target の順で流れるため、イベント経路の最上流で X のリスナより先に捕捉できます。
 3. ハンドラ内で以下を順に判定します。
    - `isComposing`（IME 変換中）→ 通す
-   - テキスト入力欄（`INPUT` / `TEXTAREA` / `contenteditable` / `role="textbox"`）→ 通す
+   - テキスト入力欄（`INPUT` / `TEXTAREA` / `contenteditable` / `role="textbox"` 等）→ 通す。Shadow DOM 内の入力欄も `composedPath()` で実ターゲットを見て取りこぼしません。
    - 修飾キーや特殊キー（Shift/Ctrl/Cmd/矢印/Enter/Tab/F1...）→ 通す
    - 上記以外の印字可能な単体キー → **`stopImmediatePropagation()` で伝播のみ阻止**
 4. `preventDefault()` は呼ばないため、Chrome 本来の挙動（IME 入力や通常スクロール）は保たれます。

@@ -22,6 +22,5 @@
       "run_at": "document_start",
       "all_frames": false
     }
-  ],
-  "host_permissions": ["https://x.com/*"]
+  ]
 }

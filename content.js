@@ -7,9 +7,10 @@
  *   ショートカットが誤発火したりする原因になる。
  *
  * 仕組み:
- *   document_start の時点で document 上のキャプチャフェーズに keydown リスナを登録する。
- *   キャプチャフェーズ（ターゲット到達前）でイベントを捕捉し、stopImmediatePropagation()
- *   で X 側のリスナ（React ルートにバインドされている）へ伝播するのを遮断する。
+ *   document_start の時点で window 上のキャプチャフェーズに keydown リスナを登録する。
+ *   キャプチャフェーズ（ターゲット到達前）の最上流でイベントを捕捉し、
+ *   stopImmediatePropagation() で X 側のリスナ（React ルートにバインドされている）へ
+ *   伝播するのを遮断する。
  *
  * 安全性の担保（最重要）:
  *   入力中（IME 変換中・テキスト入力欄にフォーカス中）のキーイベントは一切遮断しない。
@@ -39,6 +40,11 @@
       type === 'password' ||
       type === 'tel' ||
       type === 'number' ||
+      type === 'date' ||
+      type === 'datetime-local' ||
+      type === 'month' ||
+      type === 'time' ||
+      type === 'week' ||
       type === ''
     );
   }
@@ -76,8 +82,9 @@
       return isTextInputType(/** @type {HTMLInputElement} */ (el));
     }
 
-    // ARIA role="textbox" の念のためのフォールバック
-    if (el.getAttribute && el.getAttribute('role') === 'textbox') {
+    // ARIA の編集系 role の念のためのフォールバック
+    var role = el.getAttribute && el.getAttribute('role');
+    if (role === 'textbox' || role === 'searchbox' || role === 'combobox') {
       return true;
     }
 
@@ -102,7 +109,16 @@
       return true;
     }
 
-    // 2) イベントのターゲット自体が編集可能要素なら通す。
+    // 2) イベントの実ターゲットが編集可能要素なら通す。
+    //    Shadow DOM 内の要素がターゲットの場合、window/document レベルでは
+    //    e.target がシャドウホストに retarget されて編集判定を取りこぼすため、
+    //    composedPath() の先頭（シャドウ境界を越えた実ターゲット）を優先する。
+    if (typeof e.composedPath === 'function') {
+      var path = e.composedPath();
+      if (path.length > 0 && isEditableElement(path[0])) {
+        return true;
+      }
+    }
     if (isEditableElement(e.target)) {
       return true;
     }
@@ -148,10 +164,13 @@
     e.stopImmediatePropagation();
   }
 
-  // document_start 時点では DOM が未構築だが、document オブジェクト自体は存在する。
-  // document をキャプチャフェーズで購読すれば、その後 X が React ルートに
-  // バインドする keydown リスナよりも前に捕捉できる。
+  // document_start 時点では DOM が未構築だが、window オブジェクト自体は存在する。
+  // キャプチャフェーズは window → document → … → target の順で流れるため、
+  // window に登録すればイベント経路の最上流で捕捉できる。X が React ルートは
+  // もちろん、将来 document や window にキャプチャリスナを付けても遮断できる
+  // （page script より先に実行されるコンテンツスクリプトのため、同じ window 上でも
+  //   登録順で必ず先に発火する）。
   // ※ keydown のみ監視する（keyup/keypress の監視は干渉リスクを減らすため廃止。
   //    X のショートカットは keydown ベースで動作する）。
-  document.addEventListener('keydown', handleKeyDown, true /* capture phase */);
+  window.addEventListener('keydown', handleKeyDown, true /* capture phase */);
 })();
